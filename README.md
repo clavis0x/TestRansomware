@@ -7,3 +7,7 @@
 
 ## Platform
 * Windows 7, 8, 10 x86/x64
+
+## Screenshots
+- Ransomware settings  
+![Ransomware settings](https://github.com/clavis0x/TestRansomware/blob/master/screenshot/2.png)  
