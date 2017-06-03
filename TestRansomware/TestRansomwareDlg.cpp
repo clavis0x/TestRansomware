@@ -91,6 +91,8 @@ BOOL CTestRansomwareDlg::OnInitDialog()
 	AddCheckFileExtension("docx");
 	AddCheckFileExtension("ppt");
 	AddCheckFileExtension("pptx");
+	AddCheckFileExtension("xls");
+	AddCheckFileExtension("xlsx");
 	AddCheckFileExtension("hwp");
 	AddCheckFileExtension("pdf");
 	AddCheckFileExtension("jpg");
