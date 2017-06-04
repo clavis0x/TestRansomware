@@ -38,8 +38,10 @@
 #include <mmSystem.h>
 #include <vector>
 #include <list>
+#include <queue>
 using std::vector;
 using std::list;
+using std::queue;
 
 
 

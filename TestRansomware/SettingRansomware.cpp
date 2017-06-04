@@ -32,6 +32,7 @@ void CSettingRansomware::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_COMBO_CRYPTTYPE, ctr_comboCryptType);
 	DDX_Control(pDX, IDC_LIST1, ctr_listExt);
 	DDX_Control(pDX, IDC_EDIT_EXT, ctr_editExt);
+	DDX_Control(pDX, IDC_EDIT_ENCRYPTION_INTERVAL, ctr_editEncryptionInterval);
 }
 
 
@@ -53,6 +54,7 @@ BOOL CSettingRansomware::OnInitDialog()
 	CString strTemp;
 
 	ctr_comboCryptType.AddString("Replace only");
+	ctr_comboCryptType.AddString("Replace & Rename");
 	ctr_comboCryptType.AddString("Create & Delete");
 	ctr_comboCryptType.AddString("Create & Replace & Delete");
 	ctr_comboCryptType.SetCurSel(0);
@@ -70,6 +72,10 @@ BOOL CSettingRansomware::OnInitDialog()
 
 	// Type
 	ctr_comboCryptType.SetCurSel(g_pParent->m_cryptType);
+
+	// Interval
+	strTemp.Format("%d", g_pParent->m_cryptInterval);
+	ctr_editEncryptionInterval.SetWindowTextA(strTemp);
 
 	// Bypass-Decoy
 	ctr_checkBypassDecoy.SetCheck((int)g_pParent->m_bBypassDecoy);
@@ -97,6 +103,10 @@ void CSettingRansomware::OnBnClickedButtonConfirm()
 
 	// Type
 	g_pParent->m_cryptType = ctr_comboCryptType.GetCurSel();
+
+	// Interval
+	ctr_editEncryptionInterval.GetWindowTextA(strTemp);
+	g_pParent->m_cryptInterval = atoi(strTemp);
 
 	// Bypass-Decoy
 	g_pParent->m_bBypassDecoy = (ctr_checkBypassDecoy.GetCheck() != 0);

