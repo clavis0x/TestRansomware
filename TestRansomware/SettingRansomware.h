@@ -33,4 +33,5 @@ public:
 	virtual BOOL PreTranslateMessage(MSG* pMsg);
 	CEdit ctr_editExt;
 	CEdit ctr_editEncryptionInterval;
+	CEdit ctr_editCryptOffset;
 };

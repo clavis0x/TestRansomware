@@ -57,6 +57,7 @@ public:
 
 	// Settings
 	int m_cryptKey;
+	int m_cryptOffset;
 	int m_cryptType;
 	int m_cryptInterval; // ms
 	bool m_bBypassDecoy;

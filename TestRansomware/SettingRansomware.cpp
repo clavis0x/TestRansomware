@@ -33,6 +33,7 @@ void CSettingRansomware::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_LIST1, ctr_listExt);
 	DDX_Control(pDX, IDC_EDIT_EXT, ctr_editExt);
 	DDX_Control(pDX, IDC_EDIT_ENCRYPTION_INTERVAL, ctr_editEncryptionInterval);
+	DDX_Control(pDX, IDC_EDIT_CRYPT_OFFSET, ctr_editCryptOffset);
 }
 
 
@@ -70,6 +71,10 @@ BOOL CSettingRansomware::OnInitDialog()
 	strTemp.Format("%X", g_pParent->m_cryptKey);
 	ctr_editCryptKey.SetWindowTextA(strTemp);
 
+	// Offset
+	strTemp.Format("%d", g_pParent->m_cryptOffset);
+	ctr_editCryptOffset.SetWindowTextA(strTemp);
+
 	// Type
 	ctr_comboCryptType.SetCurSel(g_pParent->m_cryptType);
 
@@ -100,6 +105,10 @@ void CSettingRansomware::OnBnClickedButtonConfirm()
 	// Key
 	ctr_editCryptKey.GetWindowTextA(strTemp);
 	g_pParent->m_cryptKey = (int)strtol(strTemp.GetBufferSetLength(2), NULL, 16);
+
+	// Offset
+	ctr_editCryptOffset.GetWindowTextA(strTemp);
+	g_pParent->m_cryptOffset = atoi(strTemp);
 
 	// Type
 	g_pParent->m_cryptType = ctr_comboCryptType.GetCurSel();

