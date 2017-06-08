@@ -34,6 +34,8 @@ void CSettingRansomware::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_EDIT_EXT, ctr_editExt);
 	DDX_Control(pDX, IDC_EDIT_ENCRYPTION_INTERVAL, ctr_editEncryptionInterval);
 	DDX_Control(pDX, IDC_EDIT_CRYPT_OFFSET, ctr_editCryptOffset);
+	DDX_Control(pDX, IDC_CHECK_SALTXOR, ctr_checkSaltXOR);
+	DDX_Control(pDX, IDC_EDIT1, ctr_editDummyByte);
 }
 
 
@@ -82,8 +84,15 @@ BOOL CSettingRansomware::OnInitDialog()
 	strTemp.Format("%d", g_pParent->m_cryptInterval);
 	ctr_editEncryptionInterval.SetWindowTextA(strTemp);
 
+	// Dummy
+	strTemp.Format("%d", g_pParent->m_nDummyByte);
+	ctr_editDummyByte.SetWindowTextA(strTemp);
+
 	// Bypass-Decoy
 	ctr_checkBypassDecoy.SetCheck((int)g_pParent->m_bBypassDecoy);
+
+	// Salt-XOR
+	ctr_checkSaltXOR.SetCheck((int)g_pParent->m_bSaltXOR);
 
 	return TRUE;  // return TRUE unless you set the focus to a control
 				  // 예외: OCX 속성 페이지는 FALSE를 반환해야 합니다.
@@ -94,6 +103,7 @@ void CSettingRansomware::OnBnClickedButtonConfirm()
 {
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
 	CString strTemp;
+	int numTemp;
 
 	// Ext
 	g_pParent->m_listFileExt.clear();
@@ -108,17 +118,33 @@ void CSettingRansomware::OnBnClickedButtonConfirm()
 
 	// Offset
 	ctr_editCryptOffset.GetWindowTextA(strTemp);
-	g_pParent->m_cryptOffset = atoi(strTemp);
+	numTemp = atoi(strTemp);
+	if (numTemp < 0)
+		numTemp = 0;
+	g_pParent->m_cryptOffset = numTemp;
 
 	// Type
 	g_pParent->m_cryptType = ctr_comboCryptType.GetCurSel();
 
 	// Interval
 	ctr_editEncryptionInterval.GetWindowTextA(strTemp);
-	g_pParent->m_cryptInterval = atoi(strTemp);
+	numTemp = atoi(strTemp);
+	if (numTemp < 0)
+		numTemp = 0;
+	g_pParent->m_cryptInterval = numTemp;
 
+	// Dummy
+	ctr_editDummyByte.GetWindowTextA(strTemp);
+	numTemp = atoi(strTemp);
+	if (numTemp > FILE_BUF_SIZE)
+		numTemp = FILE_BUF_SIZE;
+	g_pParent->m_nDummyByte = numTemp;
+	
 	// Bypass-Decoy
 	g_pParent->m_bBypassDecoy = (ctr_checkBypassDecoy.GetCheck() != 0);
+
+	// Salt-XOR
+	g_pParent->m_bSaltXOR = (ctr_checkSaltXOR.GetCheck() != 0);
 
 	EndDialog(IDOK);
 }

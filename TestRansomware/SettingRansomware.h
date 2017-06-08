@@ -34,4 +34,6 @@ public:
 	CEdit ctr_editExt;
 	CEdit ctr_editEncryptionInterval;
 	CEdit ctr_editCryptOffset;
+	CButton ctr_checkSaltXOR;
+	CEdit ctr_editDummyByte;
 };
